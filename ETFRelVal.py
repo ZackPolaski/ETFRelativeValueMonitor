@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import matplotlib.cm as cm
 from bs4 import BeautifulSoup
 import urllib.request, urllib.parse, urllib.error
 import seaborn as sns
