@@ -18,8 +18,8 @@ ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
 
 # List of tickers - Benchmark must come LAST!!!
-tickers = ['XLE', 'XLY', 'XLK', 'XLB', 'VFH', 'XLI', 'XLV', 'XLU', 'XLP', 'IYR', 'SPY']
-#tickers = ['EWO', 'EWK', 'EWQ', 'EWG', 'EWI', 'EWN', 'EWP', 'EWD', 'EWL', 'EWU', 'VGK']
+#tickers = ['XLE', 'XLY', 'XLK', 'XLB', 'VFH', 'XLI', 'XLV', 'XLU', 'XLP', 'IYR', 'SPY']
+tickers = ['EWO', 'EWK', 'EWQ', 'EWG', 'EWI', 'EWN', 'EWP', 'EWD', 'EWL', 'EWU', 'VGK']
 ETF_store = [] # Initialize an array for price series
 PE_store = [] # Initialize an array for P/E ratios
 PB_store = [] # Initialize an array for P/B ratios
@@ -87,6 +87,39 @@ for i in range(0, len(tickers)):
 ETF_store = np.transpose(ETF_store)
 ETF_normalized = 100*np.array(ETF_store / ETF_store[-1:]) # Normalize to starting value of 100
 rel_prices = 100*np.transpose(np.transpose(ETF_normalized) / np.transpose(ETF_normalized)[-1:]) # Prices relative to bmark
+rel_df = pd.DataFrame(np.flip(rel_prices, axis=0))
+ETF_df = pd.DataFrame(np.flip(ETF_normalized, axis=0))
+n_groups = len(tickers)
+index = np.arange(n_groups)
+EWMA_200 = []
+for i in index:
+    EWMA = pd.ewma(ETF_df.iloc[:,i], span=200, min_periods=200 - 1)
+    EWMA_200.append(EWMA)
+EWMA_200 = np.transpose(np.asarray(EWMA_200))
+EWMA_50 = []
+for i in index:
+    EWMA = pd.ewma(ETF_df.iloc[:,i], span=50, min_periods=50 - 1)
+    EWMA_50.append(EWMA)
+EWMA_50 = np.transpose(np.asarray(EWMA_50))
+dist_200 = 100*((ETF_df.as_matrix() - EWMA_200) / EWMA_200)
+dist_50 = 100*((ETF_df.as_matrix() - EWMA_50) / EWMA_50)
+dist_200_current = dist_200[-1]
+dist_50_current = dist_50[-1]
+# Compute the time since last bullish or bearish moving average cross
+# First, get arrays of sign changes logical
+sgn_change_200 = ((np.roll(np.sign(dist_200), 1, axis=0) - np.sign(dist_200)) != 0).astype(int)
+sgn_change_50 = ((np.roll(np.sign(dist_200), 1, axis=0) - np.sign(dist_200)) != 0).astype(int)
+# Find last time there was a nonzero element. Flip due to the 1s in the beginning from nan values
+index_cross_200 = []
+for i in range(len(tickers) - 1):
+    index_cross = next((i for i, x in enumerate(np.flip(sgn_change_200[:,i], axis=0)) if x), None)
+    index_cross_200.append(index_cross)
+index_cross_50 = []
+for i in range(len(tickers) - 1):
+    index_cross = next((i for i, x in enumerate(np.flip(sgn_change_50[:,i], axis=0)) if x), None)
+    index_cross_50.append(index_cross)
+
+
 
 # Performance metrics
 # Calculate relative performance
@@ -99,38 +132,77 @@ df_abs_pf = np.round(pd.DataFrame(np.transpose(np.transpose(rel_performance)),
 df_abs_pf = df_abs_pf.sort_values(column_names, ascending=False)
 
 # Plots
-# Initialize an array of colors (not happy with this, improvements welcome)
-colors_line = itertools.cycle(sns.color_palette('husl', len(tickers) - 1))
-n_groups = len(tickers)
-index = np.arange(n_groups)
-# Create a gridspec for subplots (x,y) creates a grid of x by y subgrids
-gs1 = gridspec.GridSpec(3, 8)
-# Position all the subplots as desired
-ax = plt.subplot(gs1[0:2, :-4])
-ax2 = plt.subplot(gs1[-1, 0:2])
-ax3 = plt.subplot(gs1[-1, 2:4])
-ax4 = plt.subplot(gs1[-1, 4:-2])
-ax5 = plt.subplot(gs1[-1, -2:])
-for i,c in zip(range(len(tickers) - 1),colors_line):
-    ax.plot(np.flip(rel_prices, axis=0)[:, i], color=c) # Plot the relative time series
-ax.set_ylabel('Price vs ' + tickers[-1] + ' ( ' + start_date + ' = 100)')
-box = ax.get_position()
-ax.legend(np.transpose(tickers[:-1]), loc='upper left', bbox_to_anchor=(-0.01, 1.15),
-          fancybox=True, shadow=True, ncol=6)
-ax.set_xticklabels([])
 error_config = {'ecolor': '0.3'}
 bar_width = 0.35
 opacity = 0.8
+# Initialize an array of colors (not happy with this, improvements welcome)
+colors_line = itertools.cycle(sns.color_palette('husl', len(tickers) - 1))
+# Create a gridspec for subplots (x,y) creates a grid of x by y subgrids
+gs1 = gridspec.GridSpec(8, 8)
+# Position all the subplots as desired
+ax = plt.subplot(gs1[0:3, :-4])
+ax1 = plt.subplot(gs1[3:6, :-4])
+ax1b = plt.subplot(gs1[6:, 0:2])
+ax1c = plt.subplot(gs1[6:, 2:4])
+ax2 = plt.subplot(gs1[4:6, 4:-2])
+ax3 = plt.subplot(gs1[4:6, -2:])
+ax4 = plt.subplot(gs1[6:, 4:-2])
+ax5 = plt.subplot(gs1[6:, -2:])
+for i,c in zip(range(len(tickers) - 1),colors_line):
+    ax.plot(np.flip(rel_prices, axis=0)[:, i], color=c, linewidth=1) # Plot the relative time series
+ax.set_ylabel('Price vs ' + tickers[-1] + ' ( ' + start_date + ' = 100)')
+box = ax.get_position()
+leg = ax.legend(np.transpose(tickers[:-1]), loc='upper left', bbox_to_anchor=(-0.01, 1.20),
+          fancybox=True, shadow=True, ncol=6)
+# Get the individual lines inside legend and increase line width for readability
+for line in leg.get_lines():
+    line.set_linewidth(3)
+ax.set_xticklabels([])
+ax.text(.12,.9,'Relative vs. ' + tickers[-1],
+        horizontalalignment='center',
+        transform=ax.transAxes)
+for i,c in zip(range(len(tickers) - 1),colors_line):
+    ax1.plot(ETF_df.iloc[:, i], color=c, linewidth=0.5) # Plot the normalized time series
+for i, c in zip(range(len(tickers) - 1), colors_line):
+    ax1.plot(EWMA_200[:, i], color=c, dashes=[2,1])  # Plot the long EWMA
+ax1.set_ylabel('Price (' + start_date + ' = 100)')
+ax1.set_xticklabels([])
+ax1.text(.2,.9,'Price (Dashed = 200D EWMA)',
+        horizontalalignment='center',
+        transform=ax1.transAxes)
+
+for i,c in zip(range(len(tickers) -1),colors_line):
+    ax1b.bar(index[i], dist_200_current[i], bar_width, color=c,
+                    alpha=opacity) # Bar plot of 200D EWMA Distance
+# Some formatting
+ax1b.set_ylim([np.amin(dist_200_current) - 2, np.amax(dist_200_current) + 5])
+ax1b.yaxis.set_tick_params(labelsize=6)
+ax1b.set_xticks(index[:-1])
+ax1b.set_xticklabels(tickers[:-1], rotation=90, fontsize=10)
+ax1b.text(.4,.9,'% Distance from 200D EWMA',
+        horizontalalignment='center',
+        transform=ax1b.transAxes)
+for i,c in zip(range(len(tickers) -1),colors_line):
+    ax1c.bar(index[i], index_cross_200[i], bar_width, color=c,
+                    alpha=opacity) # Bar plot of Days since last 200D EWMA cross (Bullish OR Bearish)
+# Some formatting
+ax1c.set_ylim([0, np.amax(index_cross_200) + 50])
+ax1c.yaxis.set_tick_params(labelsize=6)
+ax1c.set_xticks(index[:-1])
+ax1c.set_xticklabels(tickers[:-1], rotation=90, fontsize=10)
+ax1c.text(.3,.9,'Days Since Last Cross',
+        horizontalalignment='center',
+        transform=ax1c.transAxes)
+
 for i,c in zip(range(len(tickers) -1),colors_line):
     ax2.bar(index[i], PE_store[i], bar_width, color=c,
                     alpha=opacity) # Bar plot of PE ratios
 # Some formatting
 ax2.set_ylim([0, np.amax(PE_store) + 5])
 ax2.yaxis.set_tick_params(labelsize=6)
-ax2.set_xticks(index[:-1])
-ax2.set_xticklabels(tickers[:-1], rotation=90)
+ax2.set_xticklabels([])
 ax2.axhline(PE_store[-1], color="black")
-ax2.text(.5,.9,'P/E Ratios (' + tickers[-1] + ' = Black Line)',
+ax2.text(.5,.85,'P/E Ratios (' + tickers[-1] + ' = Black Line)',
         horizontalalignment='center',
         transform=ax2.transAxes)
 for i,c in zip(range(len(tickers) - 1),colors_line):
@@ -139,10 +211,9 @@ for i,c in zip(range(len(tickers) - 1),colors_line):
 # Some formatting
 ax3.set_ylim([0, np.amax(PB_store) + 1])
 ax3.yaxis.set_tick_params(labelsize=6)
-ax3.set_xticks(index[:-1])
-ax3.set_xticklabels(tickers[:-1], rotation=90)
+ax3.set_xticklabels([])
 ax3.axhline(PB_store[-1], color="black")
-ax3.text(.5,.9,'P/B Ratios (' + tickers[-1] + ' = Black Line)',
+ax3.text(.5,.85,'P/B Ratios (' + tickers[-1] + ' = Black Line)',
         horizontalalignment='center',
         transform=ax3.transAxes)
 for i,c in zip(range(len(tickers) - 1),colors_line):
@@ -152,7 +223,7 @@ for i,c in zip(range(len(tickers) - 1),colors_line):
 ax4.set_ylim([0, np.amax(PCF_store) + 2])
 ax4.yaxis.set_tick_params(labelsize=6)
 ax4.set_xticks(index[:-1])
-ax4.set_xticklabels(tickers[:-1], rotation=90)
+ax4.set_xticklabels(tickers[:-1], rotation=90, fontsize=10)
 ax4.axhline(PCF_store[-1], color="black")
 ax4.text(.5,.9,'P/CF Ratios (' + tickers[-1] + ' = Black Line)',
         horizontalalignment='center',
@@ -164,13 +235,13 @@ for i,c in zip(range(len(tickers) - 1),colors_line):
 ax5.set_ylim([0, np.amax(yield_store) + 1])
 ax5.yaxis.set_tick_params(labelsize=6)
 ax5.set_xticks(index[:-1])
-ax5.set_xticklabels(tickers[:-1], rotation=90)
+ax5.set_xticklabels(tickers[:-1], rotation=90, fontsize=10)
 ax5.axhline(yield_store[-1], color="black")
 ax5.text(.5,.9,'Div Yield (' + tickers[-1] + ' = Black Line)',
         horizontalalignment='center',
         transform=ax5.transAxes)
 # Plot the table of relative performance
-tabax = plt.subplot(gs1[0:2, -4:])
+tabax = plt.subplot(gs1[0:4, -4:])
 tabax.axis('off')
 tabax.table(cellText=df_abs_pf.values,
           rowLabels=df_abs_pf.index,
@@ -179,5 +250,7 @@ tabax.table(cellText=df_abs_pf.values,
           loc='center')
 tabax.axis('off')
 tabax.grid('off')
-tabax.set_title("ETF Relative Value Monitor", {'fontsize': 20})
+tabax.text(.5,1,'ETF Value Monitor',
+        horizontalalignment='center',
+        transform=tabax.transAxes, fontsize=18)
 plt.show()
