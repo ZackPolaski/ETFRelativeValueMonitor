@@ -22,6 +22,8 @@ and the otuput is
 
 ** Of course, all of this is dependent on the quality of data available on Yahoo Finance**
 
+Update 6/13/2018 - Some technicals related to 200D EWMA added
+
 
 
 
